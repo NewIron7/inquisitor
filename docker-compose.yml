@@ -1,0 +1,35 @@
+version: '3'
+services:
+  victim1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    networks:
+      myarpnetwork:
+        ipv4_address: 192.168.1.2
+    container_name: victim1
+
+  victim2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    networks:
+      myarpnetwork:
+        ipv4_address: 192.168.1.3
+    container_name: victim2
+
+  attacker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    networks:
+      myarpnetwork:
+        ipv4_address: 192.168.1.4
+    container_name: attacker
+
+networks:
+  myarpnetwork:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 192.168.1.0/24
