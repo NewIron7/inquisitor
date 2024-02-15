@@ -1,9 +1,10 @@
 version: '3'
 services:
   victim1:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: webdevops/vsftp:latest
+    environment:
+      - FTP_USER=ftpuser
+      - FTP_PASSWORD=pass
     networks:
       myarpnetwork:
         ipv4_address: 192.168.1.2
@@ -11,8 +12,8 @@ services:
 
   victim2:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../
+      dockerfile: network/client.Dockerfile
     networks:
       myarpnetwork:
         ipv4_address: 192.168.1.3
@@ -20,8 +21,9 @@ services:
 
   attacker:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../
+      dockerfile: network/attacker.Dockerfile
+    privileged: true
     networks:
       myarpnetwork:
         ipv4_address: 192.168.1.4
