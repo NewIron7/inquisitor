@@ -2,7 +2,7 @@
 FROM alpine:latest
 
 # Install lftp
-RUN apk update && apk add --no-cache lftp bash python3
+RUN apk update && apk add --no-cache lftp bash python3 tcpdump
 
 # Set the work directory
 WORKDIR /ftp
