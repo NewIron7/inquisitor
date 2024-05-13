@@ -84,7 +84,7 @@ pub fn read_network_interface(config: &Config) {
                 }
             },
             Err(e) => {
-                println!("An error occurred while reading packet: {}", e);
+                println!("❗ An error occurred while reading packet: {}", e);
             }
         }
     }
