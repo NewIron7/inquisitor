@@ -10,18 +10,15 @@ stop:
 	docker compose -f network/docker-compose.yml stop 
 
 clean: stop
-	docker compose -f network/docker-compose.yml down
+	docker compose -f network/docker-compose.yml rm
 
 fclean: clean
-	docker system prune -af
+	docker compose -f network/docker-compose.yml down
 
 re: fclean all
 
 attacker:
 	docker exec -it attacker /bin/bash
-
-attacker2:
-	docker exec -it attacker2 /bin/bash
 
 victim1:
 	docker exec -it victim1 /bin/bash
@@ -29,4 +26,4 @@ victim1:
 victim2:
 	docker exec -it victim2 /bin/bash
 
-.Phony: all logs clean fclean
+.Phony: all logs stop clean fclean re attacker victim1 victim2

@@ -1,4 +1,3 @@
-version: '3'
 services:
   victim1:
     image: webdevops/vsftp:latest

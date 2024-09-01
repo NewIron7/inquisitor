@@ -1,14 +1,11 @@
-# Use Alpine Linux as the base image
 FROM alpine:latest
 
-# Install lftp
 RUN apk update && apk add --no-cache lftp bash python3 tcpdump
 
-# Set the work directory
 WORKDIR /ftp
 
-# copy the content of ftp-files folder
 COPY ftp-files/ .
 
-# Default command: open an interactive shell
+RUN echo "alias ftptest='lftp -u ftpuser,pass 192.168.1.2'" >> ~/.bashrc
+
 CMD ["tail", "-f", "/dev/null" ]
